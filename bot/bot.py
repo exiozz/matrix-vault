@@ -18,12 +18,13 @@ from search import CATEGORIES, SORTS
 from vault import (CODE_TITLE, Vault, code_message, current_code, help_message, query_from_embed,
                    results_message, seconds_to_next_rotation, set_token, stats_message)
 
-# .env optionnel (les variables de l'hébergeur sont prioritaires)
+# .env optionnel. Les variables de l'hébergeur sont prioritaires, sauf si elles sont vides
+# (certains panneaux définissent DISCORD_TOKEN vide par défaut).
 env_file = Path(__file__).with_name(".env")
 if env_file.exists():
-    for line in env_file.read_text(encoding="utf-8").splitlines():
+    for line in env_file.read_text(encoding="utf-8-sig").splitlines():
         m = re.match(r"\s*([A-Z_]+)\s*=\s*(.*?)\s*$", line)
-        if m and m.group(1) not in os.environ:
+        if m and not os.environ.get(m.group(1), "").strip():
             os.environ[m.group(1)] = m.group(2).strip("\"'")
 
 missing = [k for k in ("DISCORD_TOKEN", "SEED", "WORKER_URL", "OWNER_IDS") if not os.environ.get(k)]
