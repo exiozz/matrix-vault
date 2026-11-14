@@ -4,9 +4,10 @@ Stockage de fichiers perso gratuit, protégé par un code qui change toutes les 
 
 ```
 docs/      site (GitHub Pages)          → https://exiozz.github.io/matrix-vault/
-           search.js = moteur de recherche/tri partagé avec le bot
+           search.js = moteur de recherche/tri (aussi utilisé par le Worker)
 worker/    Cloudflare Worker (gratuit)  → API du site : code, sessions, upload/download vers GitHub
-bot/       bot Discord (Node.js, discord.js) à lancer chez ton hébergeur
+bot/       bot Discord en Python (discord.py) à lancer chez ton hébergeur
+           search.py = portage de search.js ; test_search.py vérifie qu'ils donnent les mêmes résultats
 stockage   Releases du repo privé exiozz/vault-data (1 release = 1 fichier, découpé en morceaux de 95 Mo)
 ```
 
@@ -44,7 +45,7 @@ Le code est envoyé en MP à chaque rotation (l'ancien MP est supprimé). Les co
    powershell -ExecutionPolicy Bypass -File .\setup.ps1
    ```
    Déploie le Worker, enregistre ses secrets, met à jour `docs/config.js` et crée `bot/.env`.
-4. **Hébergeur** : envoie `bot/` **et** `docs/search.js` en gardant l'arborescence (ou clone ce repo), Node 18.17+, commande de démarrage `npm install && npm start`, dossier `bot`. Mets les variables de `bot/.env` dans le panneau de l'hébergeur si tu n'envoies pas le fichier.
+4. **Hébergeur** : envoie le dossier `bot/` seul (Python 3.9+), dépendances `pip install -r requirements.txt`, démarrage `python bot.py`. Mets les variables de `bot/.env` dans le panneau de l'hébergeur si tu n'envoies pas le fichier.
 5. **Inviter le bot** : le lien s'affiche dans la console au démarrage (`…/oauth2/authorize?client_id=…&scope=bot+applications.commands&permissions=0`). Le bot doit partager un serveur avec toi pour t'envoyer les MP.
 
 Changer `SEED` (dans le Worker **et** le bot) invalide tous les codes, sessions et liens partagés.

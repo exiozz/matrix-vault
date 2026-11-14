@@ -1,4 +1,5 @@
-// Moteur de recherche/tri partagé entre le site (docs/) et le bot Discord (worker/).
+// Moteur de recherche/tri du site. Le bot Python en a un portage (bot/search.py) :
+// toute modif de syntaxe se fait dans les deux, et bot/test_search.py vérifie qu'ils donnent les mêmes résultats.
 // Un fichier = { id, name, size, type, created, tags: [] }
 
 export const CATEGORIES = {

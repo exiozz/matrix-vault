@@ -74,5 +74,5 @@ OWNER_IDS=$owners
 SITE_URL=https://exiozz.github.io/matrix-vault/
 "@ | Set-Content -Encoding ascii $envPath
 Write-Host "  $envPath créé (ne le partage pas, il contient le token du bot)"
-Write-Host "`nEnvoie le dossier bot/ ET docs/search.js chez ton hébergeur (garde l'arborescence), puis : npm install ; npm start"
+Write-Host "`nEnvoie le dossier bot/ chez ton hébergeur (Python 3.9+), puis : pip install -r requirements.txt ; python bot.py"
 Write-Host 'Ou recopie les 5 lignes de bot/.env dans les variables d''environnement de ton hébergeur.'

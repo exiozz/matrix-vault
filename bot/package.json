@@ -1,9 +1,0 @@
-{
-  "name": "matrix-vault-bot",
-  "private": true,
-  "type": "module",
-  "main": "index.js",
-  "engines": { "node": ">=18.17" },
-  "scripts": { "start": "node index.js" },
-  "dependencies": { "discord.js": "^14.28.1" }
-}
