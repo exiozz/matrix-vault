@@ -196,7 +196,43 @@ export async function deleteFile(env, id, { draftOnly }) {
   return { ok: true };
 }
 
-export async function downloadFile(env, ctx, id) {
+// Types affichables dans le navigateur pour l'aperçu. Tout le reste est servi en téléchargement.
+const INLINE = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
+  bmp: 'image/bmp', svg: 'image/svg+xml', ico: 'image/x-icon',
+  mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', mkv: 'video/x-matroska', ogv: 'video/ogg',
+  mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', aac: 'audio/aac', ogg: 'audio/ogg', opus: 'audio/ogg', m4a: 'audio/mp4',
+  pdf: 'application/pdf',
+};
+const TEXT_EXT = new Set('txt md csv tsv json jsonl ndjson xml yaml yml log ini toml sql js mjs ts jsx tsx py java c cpp h hpp cs go rs rb php html css scss sh ps1 bat lua kt swift dart r tex srt vtt'.split(' '));
+
+function inlineType(meta) {
+  const ext = (/\.([a-z0-9]{1,10})$/i.exec(meta.name) || [])[1]?.toLowerCase() || '';
+  if (INLINE[ext]) return INLINE[ext];
+  // texte (y compris HTML/SVG… jamais interprété : servi en text/plain)
+  if (TEXT_EXT.has(ext) || (meta.type || '').startsWith('text/')) return 'text/plain; charset=utf-8';
+  return null;
+}
+
+/** Lit un morceau entier ou une plage [from, to] via l'URL signée de GitHub. */
+async function fetchPart(env, asset, from, to, whole) {
+  const range = whole ? {} : { Range: `bytes=${from}-${to}` };
+  const r1 = await fetch(`https://api.github.com/repos/${env.GH_REPO}/releases/assets/${asset.id}`, {
+    headers: ghHeaders(env, { Accept: 'application/octet-stream', ...range }),
+    redirect: 'manual',
+  });
+  const loc = r1.headers.get('location');
+  // L'URL signée de GitHub ne doit pas recevoir le token.
+  const r2 = loc ? await fetch(loc, { headers: range }) : r1;
+  if (!r2.body || (whole ? r2.status !== 200 : r2.status !== 206)) throw new Error(`Lecture du morceau ${asset.name} : ${r2.status}`);
+  return r2.body;
+}
+
+/**
+ * Sert un fichier (ou une plage d'octets, pour la lecture/avance rapide des vidéos).
+ * inline : affichage dans le navigateur (aperçu) si le type le permet, sinon téléchargement.
+ */
+export async function downloadFile(env, ctx, id, { inline = false, rangeHeader = null } = {}) {
   const rel = await gh(env, `/releases/${id}`);
   if (rel.draft) throw new HttpError(404, 'Fichier introuvable');
   const meta = parseMeta(rel);
@@ -207,19 +243,27 @@ export async function downloadFile(env, ctx, id) {
     parts.push(a);
   }
 
-  const { readable, writable } = new FixedLengthStream(meta.size);
+  const total = meta.size;
+  let start = 0, end = total - 1, partial = false;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader || '');
+  if (m && (m[1] || m[2])) {
+    if (m[1] === '') start = Math.max(0, total - Number(m[2]));
+    else { start = Number(m[1]); if (m[2]) end = Math.min(Number(m[2]), total - 1); }
+    if (start > end || start >= total) {
+      return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${total}` } });
+    }
+    partial = true;
+  }
+
+  const { readable, writable } = new FixedLengthStream(end - start + 1);
   ctx.waitUntil((async () => {
     try {
-      for (const a of parts) {
-        const r1 = await fetch(`https://api.github.com/repos/${env.GH_REPO}/releases/assets/${a.id}`, {
-          headers: ghHeaders(env, { Accept: 'application/octet-stream' }),
-          redirect: 'manual',
-        });
-        const loc = r1.headers.get('location');
-        // L'URL signée de GitHub ne doit pas recevoir le token.
-        const r2 = loc ? await fetch(loc) : r1;
-        if (!r2.ok || !r2.body) throw new Error(`Lecture du morceau ${a.name} : ${r2.status}`);
-        await r2.body.pipeTo(writable, { preventClose: true });
+      for (let i = 0; i < parts.length; i++) {
+        const pStart = i * CHUNK, pEnd = pStart + partSize(meta, i) - 1;
+        if (pEnd < start || pStart > end) continue;
+        const from = Math.max(start, pStart) - pStart, to = Math.min(end, pEnd) - pStart;
+        const body = await fetchPart(env, parts[i], from, to, from === 0 && to === pEnd - pStart);
+        await body.pipeTo(writable, { preventClose: true });
       }
       await writable.close();
     } catch (e) {
@@ -227,10 +271,15 @@ export async function downloadFile(env, ctx, id) {
     }
   })());
 
-  return new Response(readable, {
-    headers: {
-      'Content-Type': meta.type || 'application/octet-stream',
-      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
-    },
-  });
+  const type = inline ? inlineType(meta) : null;
+  const headers = {
+    'Content-Type': type || meta.type || 'application/octet-stream',
+    'Content-Disposition': `${type ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
+    'Accept-Ranges': 'bytes',
+    'X-Content-Type-Options': 'nosniff',
+  };
+  // Un aperçu ouvert directement dans un onglet ne peut exécuter aucun script (SVG piégé, etc.).
+  if (type && type !== 'application/pdf') headers['Content-Security-Policy'] = 'sandbox';
+  if (partial) headers['Content-Range'] = `bytes ${start}-${end}/${total}`;
+  return new Response(readable, { status: partial ? 206 : 200, headers });
 }

@@ -39,7 +39,8 @@
         <button role="tab" id="tab-btn-files" aria-controls="tab-files" aria-selected="true" data-tab="files">fichiers</button>
         <button role="tab" id="tab-btn-osint" aria-controls="tab-osint" aria-selected="false" data-tab="osint">osint</button>
       </nav>
-      <div class="stats"><span id="stat-count">0</span> fichiers · <span id="stat-size">0 o</span></div>
+      <div class="stats"><span id="stat-count">0</span> fichiers · <span id="stat-size">0 o</span>
+        <span id="live" class="live" title="La liste se met à jour toute seule (actions du bot comprises)">direct</span></div>
       <div class="session">session <b id="session-left">--:--</b> <button id="logout" class="link">déconnexion</button></div>
     </header>
 
@@ -104,6 +105,23 @@
       <div id="directory" class="directory"></div>
     </main>
   </div>
+
+  <dialog id="preview" class="preview" aria-labelledby="pv-title">
+    <header class="pv-head">
+      <h3 id="pv-title"></h3>
+      <button id="pv-close" class="icon" aria-label="Fermer l'aperçu" title="Fermer (Échap)">×</button>
+    </header>
+    <div id="pv-meta" class="pv-meta"></div>
+    <div id="pv-body" class="pv-body"></div>
+    <footer class="pv-foot">
+      <button id="pv-prev" class="btn small" title="Fichier précédent (←)">← préc.</button>
+      <span class="pv-spacer"></span>
+      <button id="pv-link" class="btn small">copier le lien</button>
+      <button id="pv-dl" class="btn small">télécharger</button>
+      <span class="pv-spacer"></span>
+      <button id="pv-next" class="btn small" title="Fichier suivant (→)">suiv. →</button>
+    </footer>
+  </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
 

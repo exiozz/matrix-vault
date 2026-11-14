@@ -35,7 +35,7 @@ async function route(request, env, ctx) {
   if ((r = p.match(/^\/api\/files\/(\d+)\/download$/)) && m === 'GET') {
     const ok = (await checkSession(env, url.searchParams.get('t'))) || (await checkFileLink(env, r[1], url.searchParams.get('dl')));
     if (!ok) throw new HttpError(401, 'Lien expiré');
-    return downloadFile(env, ctx, r[1]);
+    return downloadFile(env, ctx, r[1], { inline: url.searchParams.has('inline'), rangeHeader: request.headers.get('range') });
   }
 
   // Tout le reste exige une session (site) ou le jeton admin (bot).
@@ -48,7 +48,10 @@ async function route(request, env, ctx) {
   if ((r = p.match(/^\/api\/files\/(\d+)\/parts\/(\d+)$/)) && m === 'PUT') return json(await uploadPart(env, r[1], Number(r[2]), request));
   if ((r = p.match(/^\/api\/files\/(\d+)\/complete$/)) && m === 'POST') return json(await completeFile(env, r[1]));
   if ((r = p.match(/^\/api\/files\/(\d+)\/link$/)) && m === 'POST') return json(await fileLink(env, url.origin, r[1]));
-  if ((r = p.match(/^\/api\/files\/(\d+)$/)) && m === 'PATCH') return json(await updateFile(env, r[1], await request.json().catch(() => null)));
+  if ((r = p.match(/^\/api\/files\/(\d+)$/)) && m === 'PATCH') {
+    if (!isAdmin) throw new HttpError(403, 'Renommer et taguer se font avec le bot Discord (/renommer, /tags)');
+    return json(await updateFile(env, r[1], await request.json().catch(() => null)));
+  }
   if ((r = p.match(/^\/api\/files\/(\d+)$/)) && m === 'DELETE') return json(await deleteFile(env, r[1], { draftOnly: !isAdmin }));
 
   throw new HttpError(404, 'Route inconnue');

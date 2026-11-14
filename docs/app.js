@@ -1,4 +1,4 @@
-import { CATEGORIES, HELP, SORTS, categoryOf, cleanTags, formatSize, runQuery } from './search.js';
+import { CATEGORIES, HELP, SORTS, categoryOf, cleanTags, extOf, formatSize, runQuery } from './search.js';
 import { DIRECTORY, TOOLS } from './osint.js';
 
 const API = String(window.VAULT_API || '').replace(/\/+$/, '');
@@ -114,6 +114,9 @@ const fmtDate = (d) => new Date(d).toLocaleDateString('fr-FR', { day: '2-digit',
 
 function toast(msg) {
   const t = $('#toast');
+  // l'aperçu est dans la « top layer » : le toast doit être dedans pour rester visible
+  const host = document.querySelector('#preview[open]') || document.body;
+  if (t.parentElement !== host) host.appendChild(t);
   t.textContent = msg; t.hidden = false;
   clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2600);
 }
@@ -231,6 +234,7 @@ function chips(el, items, isOn, key) {
 
 function render() {
   const { results, errors, words, sorted } = runQuery(files, query(), sortSel.value);
+  pvList = results;
 
   // boutons de filtre avec le nombre de résultats qu'ils donneraient
   const byType = {};
@@ -262,7 +266,7 @@ function render() {
   $('#list').innerHTML = results.length
     ? results.map((x, i) => `
       <div class="row" style="animation-delay:${Math.min(i, 20) * 15}ms">
-        <span class="row-name" title="${esc(x.name)}"><i class="cat">${CATEGORIES[categoryOf(x)].tag}</i>${highlight(x.name, words)}</span>
+        <button class="row-name" data-act="open" data-id="${x.id}" title="Aperçu de ${esc(x.name)}"><i class="cat">${CATEGORIES[categoryOf(x)].tag}</i>${highlight(x.name, words)}</button>
         <span class="row-tags">${(x.tags || []).map((t) => `<button class="tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}</span>
         <span class="row-meta">${formatSize(x.size)}</span>
         <span class="row-meta date" title="${esc(new Date(x.created).toLocaleString('fr-FR'))}">${fmtDate(x.created)}</span>
@@ -270,8 +274,6 @@ function render() {
         <span class="row-actions">
           <button class="icon" data-act="dl" data-id="${x.id}" title="Télécharger" aria-label="Télécharger ${esc(x.name)}">↓</button>
           <button class="icon" data-act="link" data-id="${x.id}" title="Copier un lien de partage (24 h)" aria-label="Lien de partage">⧉</button>
-          <button class="icon" data-act="rename" data-id="${x.id}" title="Renommer" aria-label="Renommer">✎</button>
-          <button class="icon" data-act="tags" data-id="${x.id}" title="Modifier les tags" aria-label="Tags">#</button>
         </span>
       </div>`).join('')
     : `<p class="empty">&gt; ${files.length ? 'aucun fichier ne correspond — essaie « tout effacer »' : 'vault vide — dépose ton premier fichier'}</p>`;
@@ -320,36 +322,136 @@ $('#list').addEventListener('click', async (e) => {
   try {
     switch (b.dataset.act) {
       case 'id':
-        await navigator.clipboard.writeText(String(x.id)).then(() => toast(`ID copié — /remove ${x.id} dans Discord pour supprimer`), () => prompt('ID :', x.id));
+        await navigator.clipboard.writeText(String(x.id)).then(() => toast(`ID copié — dans Discord : /renommer, /tags ou /remove`), () => prompt('ID :', x.id));
         break;
-      case 'dl': {
-        const a = document.createElement('a');
-        a.href = `${API}/api/files/${x.id}/download?t=${encodeURIComponent(session.token)}`;
-        a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
-        break;
-      }
-      case 'link': {
-        const { url } = await api(`/api/files/${x.id}/link`, { method: 'POST' });
-        await navigator.clipboard.writeText(url).then(() => toast('Lien copié — valable 24 h'), () => prompt('Lien (24 h) :', url));
-        break;
-      }
-      case 'rename': {
-        const name = prompt('Nouveau nom :', x.name);
-        if (!name || name === x.name) return;
-        Object.assign(x, await api(`/api/files/${x.id}`, { method: 'PATCH', body: JSON.stringify({ name }) }));
-        render(); toast('Renommé');
-        break;
-      }
-      case 'tags': {
-        const input = prompt('Tags (séparés par des virgules) :', (x.tags || []).join(', '));
-        if (input === null) return;
-        Object.assign(x, await api(`/api/files/${x.id}`, { method: 'PATCH', body: JSON.stringify({ tags: cleanTags(input) }) }));
-        render(); toast('Tags mis à jour');
-        break;
-      }
+      case 'open': openPreview(x.id); break;
+      case 'dl': download(x); break;
+      case 'link': await copyLink(x); break;
     }
   } catch (err) { toast(err.message); }
 });
+
+const fileUrl = (x, inline) => `${API}/api/files/${x.id}/download?${inline ? 'inline&' : ''}t=${encodeURIComponent(session.token)}`;
+function download(x) {
+  const a = document.createElement('a');
+  a.href = fileUrl(x, false); a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+async function copyLink(x) {
+  const { url } = await api(`/api/files/${x.id}/link`, { method: 'POST' });
+  await navigator.clipboard.writeText(url).then(() => toast('Lien copié — valable 24 h'), () => prompt('Lien (24 h) :', url));
+}
+
+// ---------- aperçu ----------
+const PREVIEW = {
+  image: 'png jpg jpeg gif webp avif bmp svg ico',
+  video: 'mp4 m4v webm mov mkv ogv',
+  audio: 'mp3 wav flac aac ogg opus m4a',
+  pdf: 'pdf',
+  text: 'txt md csv tsv json jsonl ndjson xml yaml yml log ini toml sql js mjs ts jsx tsx py java c cpp h hpp cs go rs rb php html css scss sh ps1 bat lua kt swift dart r tex srt vtt',
+};
+const TEXT_LIMIT = 256 * 1024;
+function previewKind(x) {
+  const e = extOf(x.name);
+  for (const [k, list] of Object.entries(PREVIEW)) if (list.split(' ').includes(e)) return k;
+  return (x.type || '').startsWith('text/') ? 'text' : null;
+}
+
+const pv = $('#preview');
+let pvId = null;
+let pvList = []; // résultats affichés, pour ← / →
+
+function pvMeta(x) {
+  $('#pv-title').textContent = x.name;
+  $('#pv-meta').innerHTML = `<span>${esc(CATEGORIES[categoryOf(x)].label)}</span><span>${formatSize(x.size)}</span>
+    <span>${esc(new Date(x.created).toLocaleString('fr-FR'))}</span>
+    <button class="row-id" data-pv-id="${x.id}" title="Copier l'ID">ID ${x.id}</button>
+    ${(x.tags || []).map((t) => `<span class="tag">#${esc(t)}</span>`).join('')}`;
+  const i = pvList.findIndex((y) => y.id === x.id);
+  $('#pv-prev').disabled = i <= 0;
+  $('#pv-next').disabled = i < 0 || i >= pvList.length - 1;
+}
+
+async function openPreview(id) {
+  const x = files.find((y) => y.id === id);
+  if (!x) return;
+  pvId = id;
+  pvMeta(x);
+  const body = $('#pv-body');
+  const url = fileUrl(x, true);
+  const kind = previewKind(x);
+  const fallback = (msg) => `<div class="pv-none"><p>${msg}</p><button class="btn" data-pv-dl>[ télécharger ]</button></div>`;
+  if (kind === 'image') body.innerHTML = `<img src="${esc(url)}" alt="${esc(x.name)}">`;
+  else if (kind === 'video') body.innerHTML = `<video src="${esc(url)}" controls autoplay playsinline preload="metadata"></video>`;
+  else if (kind === 'audio') body.innerHTML = `<audio src="${esc(url)}" controls autoplay></audio>`;
+  else if (kind === 'pdf') body.innerHTML = `<iframe src="${esc(url)}" title="${esc(x.name)}"></iframe>`;
+  else if (kind === 'text') {
+    body.innerHTML = '<p class="muted blink">&gt; chargement…</p>';
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Erreur ${res.status}`);
+      const reader = res.body.getReader();
+      const chunks = []; let n = 0;
+      while (n < TEXT_LIMIT) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); n += value.length; }
+      reader.cancel().catch(() => {});
+      const text = new TextDecoder().decode(new Uint8Array(await new Blob(chunks).arrayBuffer()).slice(0, TEXT_LIMIT));
+      if (pvId !== id) return;
+      body.innerHTML = `<pre>${esc(text)}</pre>${x.size > TEXT_LIMIT ? `<p class="muted">Aperçu limité aux ${formatSize(TEXT_LIMIT)} premiers — télécharge pour voir tout.</p>` : ''}`;
+    } catch (err) { if (pvId === id) body.innerHTML = fallback(`Aperçu impossible : ${esc(err.message)}`); }
+  } else body.innerHTML = fallback('Pas d\'aperçu pour ce type de fichier.');
+  // vidéo/audio dans un format que le navigateur ne lit pas (ex : certains .mkv)
+  body.querySelector('video, audio')?.addEventListener('error', () => { if (pvId === id) body.innerHTML = fallback('Ton navigateur ne sait pas lire ce format.'); });
+  if (!pv.open) pv.showModal();
+}
+
+function closePreview() { pvId = null; $('#pv-body').innerHTML = ''; if (pv.open) pv.close(); }
+const step = (d) => { const i = pvList.findIndex((y) => y.id === pvId); const n = pvList[i + d]; if (n) openPreview(n.id); };
+
+$('#pv-close').addEventListener('click', closePreview);
+// Échap : coupe vidéo/audio. Ignoré si l'aperçu a été rouvert entre-temps (l'événement arrive en différé).
+pv.addEventListener('close', () => { if (!pv.open) { pvId = null; $('#pv-body').innerHTML = ''; } });
+pv.addEventListener('click', (e) => { if (e.target === pv) closePreview(); }); // clic sur le fond
+$('#pv-prev').addEventListener('click', () => step(-1));
+$('#pv-next').addEventListener('click', () => step(1));
+pv.addEventListener('keydown', (e) => {
+  if (/INPUT|TEXTAREA|VIDEO|AUDIO/.test(e.target.tagName)) return;
+  if (e.key === 'ArrowLeft') step(-1);
+  if (e.key === 'ArrowRight') step(1);
+});
+$('#pv-dl').addEventListener('click', () => { const x = files.find((y) => y.id === pvId); if (x) download(x); });
+$('#pv-link').addEventListener('click', () => { const x = files.find((y) => y.id === pvId); if (x) copyLink(x).catch((err) => toast(err.message)); });
+pv.addEventListener('click', (e) => {
+  if (e.target.closest('[data-pv-dl]')) $('#pv-dl').click();
+  const idb = e.target.closest('[data-pv-id]');
+  if (idb) navigator.clipboard.writeText(idb.dataset.pvId).then(() => toast('ID copié'), () => {});
+});
+
+// ---------- mise à jour en direct ----------
+// Le site relit la liste toutes les 5 s (onglet visible) : un /remove, /renommer ou /tags du bot apparaît tout seul.
+const POLL_MS = 5000;
+async function poll() {
+  if (!session || document.hidden || $('#app').hidden) return;
+  try {
+    const next = await api('/api/files');
+    $('#live').classList.remove('off');
+    if (JSON.stringify(next) === JSON.stringify(files)) return;
+    const before = new Map(files.map((y) => [y.id, y])), after = new Map(next.map((y) => [y.id, y]));
+    const added = next.filter((y) => !before.has(y.id)).length;
+    const removed = files.filter((y) => !after.has(y.id)).length;
+    const changed = next.filter((y) => before.has(y.id) && JSON.stringify(before.get(y.id)) !== JSON.stringify(y)).length;
+    files = next;
+    render();
+    const msg = [added && `${added} ajouté${added > 1 ? 's' : ''}`, removed && `${removed} supprimé${removed > 1 ? 's' : ''}`, changed && `${changed} modifié${changed > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
+    if (msg) toast(`Mis à jour : ${msg}`);
+    const r = $('#live').getBoundingClientRect(); pulse(r.left + r.width / 2, r.top + r.height / 2);
+    if (pvId !== null) {
+      const x = after.get(pvId);
+      if (!x) { closePreview(); toast('Ce fichier vient d\'être supprimé'); } else pvMeta(x);
+    }
+  } catch { $('#live').classList.add('off'); }
+}
+setInterval(poll, POLL_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 
 // ---------- upload ----------
 const drop = $('#drop');
