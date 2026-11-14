@@ -1,10 +1,10 @@
 // Cœur du vault : codes tournants, sessions, liens signés, stockage GitHub Releases.
 import { cleanTags } from '../../docs/search.js';
 
-export const WINDOW = 30 * 60;             // durée de vie d'un code (s) — doit matcher le cron
+const WINDOW = 30 * 60;                    // durée de vie d'un code (s) — doit matcher bot/lib.js et docs/app.js
 const GRACE = 120;                         // l'ancien code reste valide 2 min après la rotation
 const SESSION_TTL = 60 * 60;               // durée d'une session (s)
-export const LINK_TTL = 24 * 60 * 60;      // durée d'un lien de téléchargement signé (s)
+const LINK_TTL = 24 * 60 * 60;             // durée d'un lien de téléchargement signé (s)
 const CHUNK = 95 * 1024 * 1024;            // < 100 Mo (limite de body Cloudflare free)
 const MAX_PARTS = 22;                      // 2 sous-requêtes par morceau au download, limite free = 50
 const MAX_SIZE = CHUNK * MAX_PARTS;        // ≈ 2 Go par fichier
@@ -30,22 +30,16 @@ function safeEqual(a, b) {
   return d === 0;
 }
 
-export const nowSec = () => Math.floor(Date.now() / 1000);
+const nowSec = () => Math.floor(Date.now() / 1000);
 const windowAt = (sec) => Math.floor(sec / WINDOW);
 
-// ---------- codes tournants ----------
+// ---------- codes tournants (le bot génère les mêmes, voir bot/lib.js) ----------
 
 async function codeFor(env, w) {
   const h = await hmac(env.SEED, 'pw:' + w);
   let s = '';
   for (let i = 0; i < 12; i++) s += ALPHABET[h[i] & 31];
   return s;
-}
-
-/** Code de la fenêtre contenant `sec`, au format XXXX-XXXX-XXXX, et sa fin (unix s). */
-export async function currentCode(env, sec = nowSec()) {
-  const w = windowAt(sec);
-  return { code: (await codeFor(env, w)).match(/.{4}/g).join('-'), until: (w + 1) * WINDOW };
 }
 
 export async function checkCode(env, input) {

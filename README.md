@@ -1,13 +1,16 @@
 # VAULT_
 
-Stockage de fichiers perso gratuit, protégé par un code qui change toutes les 30 min et que le bot Discord t'envoie en MP. Onglet OSINT intégré (12 outils + annuaire de 109 outils légaux).
+Stockage de fichiers perso gratuit, protégé par un code qui change toutes les 30 min et que ton bot Discord t'envoie en MP. Onglet OSINT intégré (12 outils + annuaire de 109 outils légaux).
 
 ```
 docs/      site (GitHub Pages)          → https://exiozz.github.io/matrix-vault/
            search.js = moteur de recherche/tri partagé avec le bot
-worker/    Cloudflare Worker (gratuit)  → API du site + bot Discord (interactions HTTP) + cron de rotation
+worker/    Cloudflare Worker (gratuit)  → API du site : code, sessions, upload/download vers GitHub
+bot/       bot Discord (Node.js, discord.js) à lancer chez ton hébergeur
 stockage   Releases du repo privé exiozz/vault-data (1 release = 1 fichier, découpé en morceaux de 95 Mo)
 ```
+
+Le bot et le Worker partagent la même `SEED` : le bot calcule lui-même le code, ouvre une session sur le Worker et signe les liens de téléchargement. Il n'a jamais besoin du token GitHub.
 
 ## Recherche (site et bot, même syntaxe)
 
@@ -24,38 +27,24 @@ stockage   Releases du repo privé exiozz/vault-data (1 release = 1 fichier, dé
 
 ## Bot Discord
 
-Commandes (réponses visibles par toi seul, refusées pour tout autre compte que `OWNER_IDS`) :
-- `/recherche requete tri type page` : résultats paginés avec boutons ⏮ ◀ ▶ ⏭, menus de tri et de type, liens de téléchargement valables 24 h
+Réponses visibles par toi seul, refusées à tout autre compte que `OWNER_IDS` :
+- `/recherche requete tri type page` : résultats paginés (⏮ ◀ ▶ ⏭), menus de tri et de type, liens de téléchargement valables 24 h
 - `/stats` : volume par type, plus lourds, derniers ajouts, tags
 - `/code` : code d'accès actuel
 - `/aide` : syntaxe
 
-Le code est aussi envoyé en MP à chaque rotation (l'ancien MP est supprimé).
+Le code est envoyé en MP à chaque rotation (l'ancien MP est supprimé). Les commandes s'enregistrent toutes seules au démarrage.
 
-## Mise en place (une seule fois)
+## Mise en place
 
 1. **Token GitHub** : https://github.com/settings/personal-access-tokens/new → *Only select repositories* : `vault-data` → *Contents : Read and write*.
-2. **Bot Discord** : https://discord.com/developers/applications → *New Application*.
-   - *General Information* : copie **Application ID** et **Public Key**.
-   - *Bot* → *Reset Token* : copie le **token**.
-   - Ton ID Discord : Paramètres → Avancés → Mode développeur, puis clic droit sur ton profil → *Copier l'identifiant*.
-3. **Cloudflare** (compte gratuit), dans `worker/` :
-   ```bash
-   npx wrangler login
-   npx wrangler secret put GH_TOKEN
-   npx wrangler secret put DISCORD_TOKEN
-   npx wrangler secret put DISCORD_APP_ID
-   npx wrangler secret put DISCORD_PUBLIC_KEY
-   npx wrangler secret put OWNER_IDS
-   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" | npx wrangler secret put SEED
-   npx wrangler deploy
-   ```
-4. **Relier le bot** : Developer Portal → *General Information* → *Interactions Endpoint URL* = `https://matrix-vault.<toi>.workers.dev/discord` → Save.
-5. **Commandes** (PowerShell, dans `worker/`) :
+2. **Bot Discord** : https://discord.com/developers/applications → *New Application* → *Bot* → *Reset Token*. Ton ID Discord : Paramètres → Avancés → Mode développeur, puis clic droit sur ton profil → *Copier l'identifiant*.
+3. **Worker + préparation du bot** (compte Cloudflare gratuit), dans `worker/` :
    ```powershell
-   $env:DISCORD_TOKEN="..."; $env:DISCORD_APP_ID="..."; node register-commands.mjs
+   powershell -ExecutionPolicy Bypass -File .\setup.ps1
    ```
-6. **Inviter le bot** : `https://discord.com/oauth2/authorize?client_id=<APPLICATION_ID>&scope=bot+applications.commands&permissions=0`
-7. Mettre l'URL du Worker dans `docs/config.js`, commit, push.
+   Déploie le Worker, enregistre ses secrets, met à jour `docs/config.js` et crée `bot/.env`.
+4. **Hébergeur** : envoie `bot/` **et** `docs/search.js` en gardant l'arborescence (ou clone ce repo), Node 18.17+, commande de démarrage `npm install && npm start`, dossier `bot`. Mets les variables de `bot/.env` dans le panneau de l'hébergeur si tu n'envoies pas le fichier.
+5. **Inviter le bot** : le lien s'affiche dans la console au démarrage (`…/oauth2/authorize?client_id=…&scope=bot+applications.commands&permissions=0`). Le bot doit partager un serveur avec toi pour t'envoyer les MP.
 
-Changer `SEED` invalide tous les codes, sessions et liens partagés.
+Changer `SEED` (dans le Worker **et** le bot) invalide tous les codes, sessions et liens partagés.

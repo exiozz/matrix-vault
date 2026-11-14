@@ -1,9 +1,8 @@
-// Matrix Vault — Cloudflare Worker : API du site + bot Discord + rotation du code (cron).
+// Matrix Vault — Cloudflare Worker : API du site (le bot Discord tourne à part, voir bot/).
 import {
   HttpError, checkCode, checkFileLink, checkSession, completeFile, createFile, deleteFile,
-  downloadFile, fileLink, listFiles, makeSession, nowSec, updateFile, uploadPart,
+  downloadFile, fileLink, listFiles, makeSession, updateFile, uploadPart,
 } from './core.js';
-import { handleInteraction, sendCodeDM, verifyInteraction } from './discord.js';
 
 function cors(env) {
   return {
@@ -23,12 +22,6 @@ async function route(request, env, ctx) {
   const m = request.method;
   let r;
 
-  if (m === 'POST' && p === '/discord') {
-    const i = await verifyInteraction(request, env);
-    if (!i) return new Response('Signature invalide', { status: 401 });
-    return handleInteraction(i, env, ctx, url.origin);
-  }
-
   if (m === 'POST' && p === '/api/login') {
     const body = await request.json().catch(() => ({}));
     if (!(await checkCode(env, body.password))) {
@@ -36,15 +29,6 @@ async function route(request, env, ctx) {
       throw new HttpError(401, 'Code invalide');
     }
     return json(await makeSession(env));
-  }
-
-  if (m === 'POST' && p === '/api/resend') {
-    // Anti-spam : au plus un envoi par minute (cache du datacenter).
-    const key = new Request(`https://vault.internal/resend/${Math.floor(Date.now() / 60000)}`);
-    if (await caches.default.match(key)) throw new HttpError(429, 'Patiente une minute');
-    await caches.default.put(key, new Response('1', { headers: { 'Cache-Control': 'max-age=60' } }));
-    await sendCodeDM(env, nowSec());
-    return json({ ok: true });
   }
 
   // Téléchargement : session OU lien signé propre au fichier.
@@ -83,10 +67,5 @@ export default {
     const out = new Response(res.body, res);
     for (const [k, v] of Object.entries(cors(env))) out.headers.set(k, v);
     return out;
-  },
-
-  async scheduled(event, env, ctx) {
-    // Le cron tourne juste après la rotation : on envoie le code de la nouvelle fenêtre.
-    ctx.waitUntil(sendCodeDM(env, Math.floor(event.scheduledTime / 1000) + 5));
   },
 };

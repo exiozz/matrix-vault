@@ -115,12 +115,6 @@ $('#login-form').addEventListener('submit', async (e) => {
   } finally { btn.disabled = false; }
 });
 
-$('#resend').addEventListener('click', async () => {
-  const msg = $('#login-msg');
-  try { await api('/api/resend', { method: 'POST' }); msg.className = 'msg'; msg.textContent = '> code envoyé en MP par le bot.'; }
-  catch (err) { msg.className = 'msg err'; msg.textContent = `> ${err.message}`; }
-});
-
 $('#logout').addEventListener('click', () => logout());
 
 // ---------- onglets ----------
