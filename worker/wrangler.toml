@@ -1,0 +1,17 @@
+name = "matrix-vault"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+# Rotation du mot de passe : doit correspondre à WINDOW (30 min) dans src/index.js
+[triggers]
+crons = ["*/30 * * * *"]
+
+[vars]
+GH_REPO = "exiozz/vault-data"
+ALLOWED_ORIGIN = "https://exiozz.github.io"
+SITE_URL = "https://exiozz.github.io/matrix-vault/"
+
+# Secrets (wrangler secret put <NOM>) :
+#   GH_TOKEN         token GitHub fine-grained, accès Contents: Read & write sur exiozz/vault-data uniquement
+#   SEED             longue chaîne aléatoire, sert à générer les mots de passe et signer les sessions
+#   DISCORD_WEBHOOK  URL du webhook Discord qui reçoit les codes

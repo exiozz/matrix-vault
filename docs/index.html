@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VAULT_</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23000'/><text x='3' y='13' font-size='13' fill='%2300ff41' font-family='monospace'>V</text></svg>">
+</head>
+<body>
+  <canvas id="rain" aria-hidden="true"></canvas>
+  <div class="scan" aria-hidden="true"></div>
+
+  <!-- LOGIN -->
+  <main id="login" class="screen" hidden>
+    <form id="login-form" class="gate" autocomplete="off">
+      <p class="eyebrow">// node 0x7F · secure storage</p>
+      <h1 class="glitch" data-text="VAULT_">VAULT_</h1>
+      <label for="pw" class="prompt"><span>&gt;</span> code d'accès</label>
+      <input id="pw" name="pw" inputmode="text" spellcheck="false" placeholder="XXXX-XXXX-XXXX" maxlength="16" required autofocus>
+      <button type="submit" class="btn primary">[ entrer ]</button>
+      <p id="login-msg" class="msg" role="status"></p>
+      <div class="gate-foot">
+        <span>rotation dans <b id="rotate">--:--</b></span>
+        <button type="button" id="resend" class="link">renvoyer sur discord</button>
+      </div>
+    </form>
+  </main>
+
+  <!-- VAULT -->
+  <main id="vault" class="screen" hidden>
+    <header class="bar">
+      <div class="brand">VAULT_<span class="cursor"></span></div>
+      <div class="stats"><span id="stat-count">0</span> fichiers · <span id="stat-size">0 o</span></div>
+      <div class="session">session <b id="session-left">--:--</b> <button id="logout" class="link">déconnexion</button></div>
+    </header>
+
+    <label id="drop" class="drop" tabindex="0">
+      <input id="file-input" type="file" multiple hidden>
+      <span class="drop-big">déposer des fichiers</span>
+      <span class="drop-small">ou cliquer · max 2 Go par fichier · stockage permanent</span>
+    </label>
+
+    <section id="queue" class="queue" aria-live="polite"></section>
+
+    <section class="files">
+      <div class="files-head">
+        <h2>&gt; ls ./vault</h2>
+        <input id="search" type="search" placeholder="grep…" aria-label="Rechercher un fichier">
+      </div>
+      <div id="list" class="list"></div>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
