@@ -6,7 +6,7 @@ Stockage de fichiers perso gratuit, protégé par un code qui change toutes les 
 docs/      site (GitHub Pages)          → https://exiozz.github.io/matrix-vault/
            search.js = moteur de recherche/tri (aussi utilisé par le Worker)
 worker/    Cloudflare Worker (gratuit)  → API du site : code, sessions, upload/download vers GitHub
-bot/       bot Discord en Python (discord.py) à lancer chez ton hébergeur
+bot/       bot Discord en Python (discord.py), gardé hors du repo (local + chez ton hébergeur)
            search.py = portage de search.js ; test_search.py vérifie qu'ils donnent les mêmes résultats
 stockage   Releases du repo privé exiozz/vault-data (1 release = 1 fichier, découpé en morceaux de 95 Mo)
 ```
