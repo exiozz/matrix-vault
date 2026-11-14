@@ -67,6 +67,8 @@ async function verify(env, scope, token) {
 
 export const makeSession = (env) => sign(env, 's', SESSION_TTL);
 export const checkSession = (env, token) => verify(env, 's', token);
+/** Jeton admin : seul le bot (qui a la SEED) peut le fabriquer. Exigé pour supprimer un fichier. */
+export const checkAdmin = (env, token) => verify(env, 'admin', token);
 
 /** Lien de téléchargement d'un seul fichier, valable LINK_TTL, sans session. */
 export async function fileLink(env, origin, id) {
@@ -184,9 +186,11 @@ export async function updateFile(env, id, body) {
   return toFile(out, meta);
 }
 
-export async function deleteFile(env, id) {
+/** draftOnly : une session du site ne peut supprimer qu'un upload inachevé (nettoyage après échec). */
+export async function deleteFile(env, id, { draftOnly }) {
   const rel = await gh(env, `/releases/${id}`);
   parseMeta(rel); // ne supprime que des releases créées par le vault
+  if (draftOnly && !rel.draft) throw new HttpError(403, 'Suppression réservée au bot Discord (/remove)');
   await gh(env, `/releases/${id}`, { method: 'DELETE' });
   if (!rel.draft) await gh(env, `/git/refs/tags/${encodeURIComponent(rel.tag_name)}`, { method: 'DELETE' }).catch(() => {});
   return { ok: true };

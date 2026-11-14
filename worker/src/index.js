@@ -1,6 +1,6 @@
 // Matrix Vault — Cloudflare Worker : API du site (le bot Discord tourne à part, voir bot/).
 import {
-  HttpError, checkCode, checkFileLink, checkSession, completeFile, createFile, deleteFile,
+  HttpError, checkAdmin, checkCode, checkFileLink, checkSession, completeFile, createFile, deleteFile,
   downloadFile, fileLink, listFiles, makeSession, updateFile, uploadPart,
 } from './core.js';
 
@@ -38,9 +38,10 @@ async function route(request, env, ctx) {
     return downloadFile(env, ctx, r[1]);
   }
 
-  // Tout le reste exige une session.
+  // Tout le reste exige une session (site) ou le jeton admin (bot).
   const auth = (request.headers.get('authorization') || '').replace(/^Bearer /, '');
-  if (!(await checkSession(env, auth))) throw new HttpError(401, 'Session expirée');
+  const isAdmin = await checkAdmin(env, auth);
+  if (!isAdmin && !(await checkSession(env, auth))) throw new HttpError(401, 'Session expirée');
 
   if (m === 'GET' && p === '/api/files') return json(await listFiles(env));
   if (m === 'POST' && p === '/api/files') return json(await createFile(env, await request.json().catch(() => null)));
@@ -48,7 +49,7 @@ async function route(request, env, ctx) {
   if ((r = p.match(/^\/api\/files\/(\d+)\/complete$/)) && m === 'POST') return json(await completeFile(env, r[1]));
   if ((r = p.match(/^\/api\/files\/(\d+)\/link$/)) && m === 'POST') return json(await fileLink(env, url.origin, r[1]));
   if ((r = p.match(/^\/api\/files\/(\d+)$/)) && m === 'PATCH') return json(await updateFile(env, r[1], await request.json().catch(() => null)));
-  if ((r = p.match(/^\/api\/files\/(\d+)$/)) && m === 'DELETE') return json(await deleteFile(env, r[1]));
+  if ((r = p.match(/^\/api\/files\/(\d+)$/)) && m === 'DELETE') return json(await deleteFile(env, r[1], { draftOnly: !isAdmin }));
 
   throw new HttpError(404, 'Route inconnue');
 }

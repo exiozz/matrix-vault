@@ -61,20 +61,31 @@
         <div class="toolbar">
           <div class="searchbox">
             <span aria-hidden="true">&gt;</span>
-            <input id="search" type="search" placeholder="rechercher…  ex : rapport type:doc size:>10mo after:30d" aria-label="Recherche avancée" spellcheck="false">
-            <button id="help-btn" class="link" aria-expanded="false" aria-controls="help">syntaxe</button>
+            <input id="search" type="search" placeholder="rechercher un fichier par son nom…" aria-label="Rechercher un fichier" spellcheck="false">
           </div>
-          <select id="sort" aria-label="Tri"></select>
+          <label class="sortbox"><span>trier</span><select id="sort" aria-label="Trier"></select></label>
+        </div>
+
+        <div class="filters">
+          <div class="fgroup"><span class="flabel">type</span><div id="f-type" class="chips" role="group" aria-label="Filtrer par type"></div></div>
+          <div class="fgroup"><span class="flabel">taille</span><div id="f-size" class="chips" role="group" aria-label="Filtrer par taille"></div></div>
+          <div class="fgroup"><span class="flabel">ajouté</span><div id="f-date" class="chips" role="group" aria-label="Filtrer par date d'ajout"></div></div>
+          <div class="fgroup" id="g-tags"><span class="flabel">tags</span><div id="f-tags" class="chips" role="group" aria-label="Filtrer par tag"></div></div>
+        </div>
+
+        <div class="infobar">
+          <p id="info" class="info" role="status"></p>
+          <button id="reset" class="link" hidden>tout effacer</button>
+          <button id="help-btn" class="link" aria-expanded="false" aria-controls="help">recherche avancée</button>
         </div>
         <div id="help" class="help" hidden></div>
-        <div id="chips" class="chips" role="group" aria-label="Filtrer par type"></div>
-        <p id="info" class="info" role="status"></p>
 
         <div class="thead" role="row">
           <button data-col="name">nom</button>
           <span>tags</span>
           <button data-col="size" class="r">taille</button>
           <button data-col="date" class="r">date</button>
+          <span class="r">id</span>
           <span></span>
         </div>
         <div id="list" class="list"></div>

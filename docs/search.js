@@ -47,6 +47,7 @@ export const HELP = [
   ['ext:', 'extension — ext:pdf|docx'],
   ['tag:', 'tag:perso — tag:none = sans tag'],
   ['name:', 'texte uniquement dans le nom'],
+  ['id:', 'identifiant affiché sur chaque fichier — id:445576569'],
   ['size:', '>100mb  <1go  10mb..2gb  (ko/mo/go/to acceptés)'],
   ['date:', '2026 — 2026-11 — 2026-11-14 — today — 7d'],
   ['after: / before:', '2026-01-01 ou relatif : 7d 2w 3m 1y'],
@@ -104,7 +105,7 @@ function parseDate(key, v, now) {
   return key === 'after' ? (t) => t >= p[0] : (t) => t < p[0];
 }
 
-const KEYS = new Set(['name', 'ext', 'type', 'tag', 'size', 'date', 'after', 'before', 'sort']);
+const KEYS = new Set(['id', 'name', 'ext', 'type', 'tag', 'size', 'date', 'after', 'before', 'sort']);
 const TOKEN = /(-?)(?:([a-z]+):)?("([^"]*)"?|\/((?:\\.|[^/\\])+)\/([a-z]*)|\S+)/gi;
 
 export function parseQuery(q) {
@@ -136,6 +137,7 @@ export function parseQuery(q) {
           if (parts.some((p) => !p)) errors.push(`tri inconnu : ${val}`); else sort = parts;
           continue;
         }
+        case 'id': test = (f) => vals.includes(String(f.id)); break;
         case 'ext': test = (f) => vals.includes(extOf(f.name)); break;
         case 'type': {
           const bad = vals.filter((v) => !CATEGORIES[v]);

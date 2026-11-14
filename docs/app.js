@@ -10,36 +10,85 @@ const local = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 
-// ---------- pluie matrix ----------
+// ---------- pluie matrix réactive ----------
+// Souris : les colonnes proches accélèrent et s'illuminent. Clic : onde de glyphes.
+// Frappe / upload : regain d'énergie de toute la pluie. Désactivé si « réduire les animations ».
 const canvas = $('#rain');
 const g = canvas.getContext('2d');
 const glyphs = 'アカサタナハマヤラワガザダバパイキシチニヒミリギジヂビピウクスツヌフムユルグズブプエケセテネヘメレゲゼデベペオコソトノホモヨロゴゾドボポ0123456789ABCDEF<>/{}[]=+*';
+const glyph = () => glyphs[(Math.random() * glyphs.length) | 0];
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-let cols = [], fs = 16;
+const rain = { cols: [], fs: 16, mouse: { x: -1e4, y: -1e4 }, ripples: [], energy: 0, floor: 0 };
+const RADIUS = 140;
+
 function resize() {
   const dpr = Math.min(devicePixelRatio || 1, 2);
   canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  fs = innerWidth < 640 ? 14 : 16;
-  cols = Array.from({ length: Math.ceil(innerWidth / fs) }, () => Math.random() * -innerHeight / fs);
+  rain.fs = innerWidth < 640 ? 14 : 16;
+  rain.cols = Array.from({ length: Math.ceil(innerWidth / rain.fs) }, () => Math.random() * -innerHeight / rain.fs);
   g.fillStyle = '#000'; g.fillRect(0, 0, innerWidth, innerHeight);
 }
+
 function frame() {
+  const { fs, cols, mouse } = rain;
   g.fillStyle = 'rgba(0,0,0,0.08)';
   g.fillRect(0, 0, innerWidth, innerHeight);
   g.font = `${fs}px JetBrains Mono, monospace`;
+  const speed = 1 + Math.max(rain.energy, rain.floor);
   for (let i = 0; i < cols.length; i++) {
-    const y = cols[i] * fs;
-    g.fillStyle = Math.random() > 0.975 ? '#d8ffe0' : '#00ff41';
-    g.fillText(glyphs[(Math.random() * glyphs.length) | 0], i * fs, y);
+    const x = i * fs, y = cols[i] * fs;
+    const near = Math.max(0, 1 - Math.hypot(x - mouse.x, y - mouse.y) / RADIUS);
+    const colNear = Math.max(0, 1 - Math.abs(x - mouse.x) / RADIUS);
+    g.fillStyle = near > 0.15 || Math.random() > 0.975 ? '#e8ffee' : '#00ff41';
+    g.fillText(glyph(), x, y);
     if (y > innerHeight && Math.random() > 0.975) cols[i] = 0;
-    cols[i] += 1;
+    cols[i] += speed + colNear * 1.5;
   }
+  // halo de glyphes qui grésillent autour du curseur
+  if (mouse.x > -1e3) {
+    for (let k = 0; k < 6; k++) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * RADIUS * 0.6;
+      g.fillStyle = `rgba(0,255,65,${0.35 + Math.random() * 0.5})`;
+      g.fillText(glyph(), mouse.x + Math.cos(a) * r, mouse.y + Math.sin(a) * r);
+    }
+  }
+  // ondes de clic
+  rain.ripples = rain.ripples.filter((rp) => rp.r < rp.max);
+  for (const rp of rain.ripples) {
+    rp.r += 16;
+    const alpha = 1 - rp.r / rp.max;
+    const n = Math.floor((2 * Math.PI * rp.r) / (fs * 1.6));
+    g.fillStyle = `rgba(200,255,215,${alpha})`;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      g.fillText(glyph(), rp.x + Math.cos(a) * rp.r, rp.y + Math.sin(a) * rp.r);
+    }
+  }
+  rain.energy *= 0.94;
 }
+
+function pulse(x, y) {
+  if (reduced) return;
+  rain.ripples.push({ x, y, r: 0, max: Math.max(innerWidth, innerHeight) * 0.6 });
+  // relance les colonnes touchées depuis le point de clic
+  const c = Math.round(x / rain.fs);
+  for (let i = c - 3; i <= c + 3; i++) if (rain.cols[i] !== undefined) rain.cols[i] = y / rain.fs;
+}
+const kick = (n = 0.6) => { rain.energy = Math.min(rain.energy + n, 4); };
+
 resize();
 addEventListener('resize', resize);
 if (reduced) { for (let i = 0; i < 60; i++) frame(); }
-else { let last = 0; const loop = (t) => { if (t - last > 50) { frame(); last = t; } requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
+else {
+  addEventListener('pointermove', (e) => { rain.mouse.x = e.clientX; rain.mouse.y = e.clientY; }, { passive: true });
+  document.documentElement.addEventListener('pointerleave', () => { rain.mouse.x = rain.mouse.y = -1e4; });
+  addEventListener('pointerdown', (e) => pulse(e.clientX, e.clientY), { passive: true });
+  addEventListener('keydown', () => kick(0.35));
+  let last = 0;
+  const loop = (t) => { if (t - last > 40) { frame(); last = t; } requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+}
 
 // ---------- session ----------
 const store = {
@@ -129,12 +178,18 @@ document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click
 
 // ---------- fichiers : état ----------
 let files = [];
-let chip = local.get('vault.chip', '');
+// Filtres en clair, traduits en requête pour le moteur de recherche (même syntaxe que le bot).
+const SIZE_F = [['<10mo', '< 10 Mo'], ['10mo..100mo', '10 – 100 Mo'], ['100mo..1go', '100 Mo – 1 Go'], ['>1go', '> 1 Go']];
+const DATE_F = [['date:today', "aujourd'hui"], ['after:7d', '7 jours'], ['after:30d', '30 jours'], ['after:1y', '12 mois'], ['before:1y', "+ d'un an"]];
+const f = { type: '', size: '', date: '', tags: [], ...local.get('vault.filters', {}) };
+const saveFilters = () => local.set('vault.filters', f);
+
 const sortSel = $('#sort');
 sortSel.innerHTML = Object.entries(SORTS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
 sortSel.value = SORTS[local.get('vault.sort', 'date-desc')] ? local.get('vault.sort', 'date-desc') : 'date-desc';
 
-$('#help').innerHTML = `<dl>${HELP.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+$('#help').innerHTML = `<p>Tu peux taper ces filtres directement dans la barre de recherche, en plus des boutons :</p>
+  <dl>${HELP.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
   <p class="muted">Exemples (cliquer pour essayer) : ${['rapport type:doc after:30d sort:size-desc', 'ext:mp4|mkv size:>500mo -tag:vu', 'tag:none sort:size-desc', '/^IMG_\\d+/ date:2026']
     .map((q) => `<button class="ex link" data-q="${esc(q)}">${esc(q)}</button>`).join(' · ')}</p>`;
 
@@ -158,53 +213,83 @@ function highlight(name, words) {
   return out;
 }
 
+/** Requête complète : texte tapé + filtres cliqués, sauf `skip` (pour compter les résultats de chaque bouton). */
+function query(skip) {
+  const parts = [$('#search').value];
+  if (f.type && skip !== 'type') parts.push(`type:${f.type}`);
+  if (f.size && skip !== 'size') parts.push(`size:${f.size}`);
+  if (f.date && skip !== 'date') parts.push(f.date);
+  if (f.tags.length && skip !== 'tags') parts.push(`tag:${f.tags.join('|')}`);
+  return parts.join(' ');
+}
+const count = (q) => runQuery(files, q).results.length;
+
+function chips(el, items, isOn, key) {
+  el.innerHTML = items.map(([v, label, n]) =>
+    `<button class="chip" data-f="${key}" data-v="${esc(v)}" aria-pressed="${isOn(v)}"${!n && !isOn(v) ? ' data-empty' : ''}>${esc(label)} <span>${n}</span></button>`).join('');
+}
+
 function render() {
-  const q = $('#search').value;
-  const base = runQuery(files, q, sortSel.value);
-  const { results, errors, words, sorted } = chip ? runQuery(files, `${q} type:${chip}`, sortSel.value) : base;
+  const { results, errors, words, sorted } = runQuery(files, query(), sortSel.value);
 
-  // compteurs par type (sur la requête courante, hors filtre de type)
-  const counts = {};
-  for (const f of base.results) { const c = categoryOf(f); counts[c] = (counts[c] || 0) + 1; }
-  $('#chips').innerHTML = [['', 'Tout', base.results.length], ...Object.entries(CATEGORIES).map(([k, c]) => [k, c.label, counts[k] || 0])]
-    .filter(([k, , n]) => !k || n || k === chip)
-    .map(([k, l, n]) => `<button class="chip" data-chip="${k}" aria-pressed="${k === chip}">${l} <span>${n}</span></button>`).join('');
+  // boutons de filtre avec le nombre de résultats qu'ils donneraient
+  const byType = {};
+  for (const x of runQuery(files, query('type')).results) { const c = categoryOf(x); byType[c] = (byType[c] || 0) + 1; }
+  chips($('#f-type'), Object.entries(CATEGORIES).filter(([k]) => byType[k] || f.type === k).map(([k, c]) => [k, c.label, byType[k] || 0]), (v) => f.type === v, 'type');
+  const noSize = query('size'), noDate = query('date');
+  chips($('#f-size'), SIZE_F.map(([v, l]) => [v, l, count(`${noSize} size:${v}`)]), (v) => f.size === v, 'size');
+  chips($('#f-date'), DATE_F.map(([v, l]) => [v, l, count(`${noDate} ${v}`)]), (v) => f.date === v, 'date');
+  const tagCount = {};
+  for (const x of files) for (const t of x.tags || []) tagCount[t] = (tagCount[t] || 0) + 1;
+  const tags = Object.keys(tagCount).sort((a, b) => tagCount[b] - tagCount[a] || a.localeCompare(b)).slice(0, 24);
+  for (const t of f.tags) if (!tags.includes(t)) tags.push(t);
+  $('#g-tags').hidden = !tags.length;
+  const noTags = query('tags');
+  chips($('#f-tags'), tags.map((t) => [t, `#${t}`, count(`${noTags} tag:${t}`)]), (v) => f.tags.includes(v), 'tags');
 
-  const total = files.reduce((a, f) => a + f.size, 0);
+  const total = files.reduce((a, x) => a + x.size, 0);
   $('#stat-count').textContent = files.length;
   $('#stat-size').textContent = formatSize(total);
-  const shownSize = results.reduce((a, f) => a + f.size, 0);
+  const shownSize = results.reduce((a, x) => a + x.size, 0);
+  const active = $('#search').value.trim() || f.type || f.size || f.date || f.tags.length;
+  $('#reset').hidden = !active;
   $('#info').innerHTML = (errors.length ? `<span class="err">⚠ ${esc(errors.join(' · '))}</span> ` : '') +
-    `${results.length} / ${files.length} fichiers · ${formatSize(shownSize)}${sorted ? ' · tri de la requête' : ''}`;
+    `<b>${results.length}</b> fichier${results.length > 1 ? 's' : ''} sur ${files.length} · ${formatSize(shownSize)}${sorted ? ' · tri tapé dans la recherche' : ''}`;
 
   const [sk, sd] = sortSel.value.split('-');
   for (const b of document.querySelectorAll('.thead [data-col]')) b.dataset.dir = !sorted && b.dataset.col === sk ? sd : '';
 
   $('#list').innerHTML = results.length
-    ? results.map((f, i) => `
+    ? results.map((x, i) => `
       <div class="row" style="animation-delay:${Math.min(i, 20) * 15}ms">
-        <span class="row-name" title="${esc(f.name)}"><i class="cat">${CATEGORIES[categoryOf(f)].tag}</i>${highlight(f.name, words)}</span>
-        <span class="row-tags">${(f.tags || []).map((t) => `<button class="tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}</span>
-        <span class="row-meta">${formatSize(f.size)}</span>
-        <span class="row-meta date" title="${esc(new Date(f.created).toLocaleString('fr-FR'))}">${fmtDate(f.created)}</span>
+        <span class="row-name" title="${esc(x.name)}"><i class="cat">${CATEGORIES[categoryOf(x)].tag}</i>${highlight(x.name, words)}</span>
+        <span class="row-tags">${(x.tags || []).map((t) => `<button class="tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}</span>
+        <span class="row-meta">${formatSize(x.size)}</span>
+        <span class="row-meta date" title="${esc(new Date(x.created).toLocaleString('fr-FR'))}">${fmtDate(x.created)}</span>
+        <button class="row-id" data-act="id" data-id="${x.id}" title="Copier l'ID (pour /remove dans Discord)">${x.id}</button>
         <span class="row-actions">
-          <button class="icon" data-act="dl" data-id="${f.id}" title="Télécharger" aria-label="Télécharger ${esc(f.name)}">↓</button>
-          <button class="icon" data-act="link" data-id="${f.id}" title="Copier un lien de partage (24 h)" aria-label="Lien de partage">⧉</button>
-          <button class="icon" data-act="rename" data-id="${f.id}" title="Renommer" aria-label="Renommer">✎</button>
-          <button class="icon" data-act="tags" data-id="${f.id}" title="Modifier les tags" aria-label="Tags">#</button>
-          <button class="icon del" data-act="del" data-id="${f.id}" title="Supprimer" aria-label="Supprimer ${esc(f.name)}">×</button>
+          <button class="icon" data-act="dl" data-id="${x.id}" title="Télécharger" aria-label="Télécharger ${esc(x.name)}">↓</button>
+          <button class="icon" data-act="link" data-id="${x.id}" title="Copier un lien de partage (24 h)" aria-label="Lien de partage">⧉</button>
+          <button class="icon" data-act="rename" data-id="${x.id}" title="Renommer" aria-label="Renommer">✎</button>
+          <button class="icon" data-act="tags" data-id="${x.id}" title="Modifier les tags" aria-label="Tags">#</button>
         </span>
       </div>`).join('')
-    : `<p class="empty">&gt; ${files.length ? 'aucun résultat' : 'vault vide — dépose ton premier fichier'}</p>`;
+    : `<p class="empty">&gt; ${files.length ? 'aucun fichier ne correspond — essaie « tout effacer »' : 'vault vide — dépose ton premier fichier'}</p>`;
 }
 
 // ---------- fichiers : contrôles ----------
 let searchT;
 $('#search').addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(render, 80); });
 sortSel.addEventListener('change', () => { local.set('vault.sort', sortSel.value); render(); });
-$('#chips').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-chip]'); if (!b) return;
-  chip = b.dataset.chip === chip ? '' : b.dataset.chip; local.set('vault.chip', chip); render();
+document.querySelector('.filters').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-f]'); if (!b) return;
+  const { f: key, v } = b.dataset;
+  if (key === 'tags') f.tags = f.tags.includes(v) ? f.tags.filter((t) => t !== v) : [...f.tags, v];
+  else f[key] = f[key] === v ? '' : v;
+  saveFilters(); render();
+});
+$('#reset').addEventListener('click', () => {
+  $('#search').value = ''; Object.assign(f, { type: '', size: '', date: '', tags: [] }); saveFilters(); render();
 });
 document.querySelectorAll('.thead [data-col]').forEach((b) => b.addEventListener('click', () => {
   const col = b.dataset.col;
@@ -227,47 +312,43 @@ addEventListener('keydown', (e) => {
 
 $('#list').addEventListener('click', async (e) => {
   const tag = e.target.closest('[data-tag]');
-  if (tag) { $('#search').value = `tag:${tag.dataset.tag}`; render(); return; }
+  if (tag) { if (!f.tags.includes(tag.dataset.tag)) f.tags = [...f.tags, tag.dataset.tag]; saveFilters(); render(); return; }
   const b = e.target.closest('[data-act]');
   if (!b) return;
-  const f = files.find((x) => String(x.id) === b.dataset.id);
-  if (!f) return;
+  const x = files.find((y) => String(y.id) === b.dataset.id);
+  if (!x) return;
   try {
     switch (b.dataset.act) {
+      case 'id':
+        await navigator.clipboard.writeText(String(x.id)).then(() => toast(`ID copié — /remove ${x.id} dans Discord pour supprimer`), () => prompt('ID :', x.id));
+        break;
       case 'dl': {
         const a = document.createElement('a');
-        a.href = `${API}/api/files/${f.id}/download?t=${encodeURIComponent(session.token)}`;
+        a.href = `${API}/api/files/${x.id}/download?t=${encodeURIComponent(session.token)}`;
         a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
         break;
       }
       case 'link': {
-        const { url } = await api(`/api/files/${f.id}/link`, { method: 'POST' });
+        const { url } = await api(`/api/files/${x.id}/link`, { method: 'POST' });
         await navigator.clipboard.writeText(url).then(() => toast('Lien copié — valable 24 h'), () => prompt('Lien (24 h) :', url));
         break;
       }
       case 'rename': {
-        const name = prompt('Nouveau nom :', f.name);
-        if (!name || name === f.name) return;
-        Object.assign(f, await api(`/api/files/${f.id}`, { method: 'PATCH', body: JSON.stringify({ name }) }));
+        const name = prompt('Nouveau nom :', x.name);
+        if (!name || name === x.name) return;
+        Object.assign(x, await api(`/api/files/${x.id}`, { method: 'PATCH', body: JSON.stringify({ name }) }));
         render(); toast('Renommé');
         break;
       }
       case 'tags': {
-        const input = prompt('Tags (séparés par des virgules) :', (f.tags || []).join(', '));
+        const input = prompt('Tags (séparés par des virgules) :', (x.tags || []).join(', '));
         if (input === null) return;
-        Object.assign(f, await api(`/api/files/${f.id}`, { method: 'PATCH', body: JSON.stringify({ tags: cleanTags(input) }) }));
+        Object.assign(x, await api(`/api/files/${x.id}`, { method: 'PATCH', body: JSON.stringify({ tags: cleanTags(input) }) }));
         render(); toast('Tags mis à jour');
         break;
       }
-      case 'del': {
-        if (!confirm(`Supprimer définitivement « ${f.name} » ?`)) return;
-        b.disabled = true;
-        await api(`/api/files/${f.id}`, { method: 'DELETE' });
-        files = files.filter((x) => x !== f); render(); toast('Supprimé');
-        break;
-      }
     }
-  } catch (err) { toast(err.message); b.disabled = false; }
+  } catch (err) { toast(err.message); }
 });
 
 // ---------- upload ----------
@@ -300,7 +381,8 @@ function pump() {
   while (active < 2 && queue.length) {
     const job = queue.shift();
     active++;
-    upload(job).finally(() => { active--; pump(); });
+    rain.floor = 0.9; // la pluie accélère tant qu'un envoi est en cours
+    upload(job).finally(() => { active--; if (!active) rain.floor = 0; pump(); });
   }
 }
 
@@ -323,6 +405,8 @@ async function upload({ file, el, tags }) {
     pct.textContent = 'finalisation…';
     await api(`/api/files/${id}/complete`, { method: 'POST' });
     set(file.size); pct.textContent = 'stocké ✓';
+    const r = drop.getBoundingClientRect();
+    pulse(r.left + r.width / 2, r.top + r.height / 2); kick(1.5);
     setTimeout(() => el.remove(), 2500);
     refresh();
   } catch (err) {
