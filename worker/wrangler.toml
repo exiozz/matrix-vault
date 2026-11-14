@@ -2,7 +2,7 @@ name = "matrix-vault"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
 
-# Rotation du mot de passe : doit correspondre à WINDOW (30 min) dans src/index.js
+# Rotation du code : doit correspondre à WINDOW (30 min) dans src/core.js
 [triggers]
 crons = ["*/30 * * * *"]
 
@@ -11,7 +11,10 @@ GH_REPO = "exiozz/vault-data"
 ALLOWED_ORIGIN = "https://exiozz.github.io"
 SITE_URL = "https://exiozz.github.io/matrix-vault/"
 
-# Secrets (wrangler secret put <NOM>) :
-#   GH_TOKEN         token GitHub fine-grained, accès Contents: Read & write sur exiozz/vault-data uniquement
-#   SEED             longue chaîne aléatoire, sert à générer les mots de passe et signer les sessions
-#   DISCORD_WEBHOOK  URL du webhook Discord qui reçoit les codes
+# Secrets (npx wrangler secret put <NOM>) :
+#   GH_TOKEN            token GitHub fine-grained, Contents: Read & write sur exiozz/vault-data uniquement
+#   SEED                longue chaîne aléatoire : génère les codes et signe sessions/liens
+#   DISCORD_TOKEN       token du bot (Developer Portal → Bot → Reset Token)
+#   DISCORD_APP_ID      Developer Portal → General Information → Application ID
+#   DISCORD_PUBLIC_KEY  Developer Portal → General Information → Public Key
+#   OWNER_IDS           ton ID Discord (clic droit sur ton profil → Copier l'identifiant), plusieurs séparés par des virgules

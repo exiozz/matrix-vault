@@ -26,37 +26,77 @@
       <p id="login-msg" class="msg" role="status"></p>
       <div class="gate-foot">
         <span>rotation dans <b id="rotate">--:--</b></span>
-        <button type="button" id="resend" class="link">renvoyer sur discord</button>
+        <button type="button" id="resend" class="link">recevoir en MP discord</button>
       </div>
     </form>
   </main>
 
-  <!-- VAULT -->
-  <main id="vault" class="screen" hidden>
+  <!-- APP -->
+  <div id="app" class="screen" hidden>
     <header class="bar">
       <div class="brand">VAULT_<span class="cursor"></span></div>
+      <nav class="tabs" role="tablist">
+        <button role="tab" id="tab-btn-files" aria-controls="tab-files" aria-selected="true" data-tab="files">fichiers</button>
+        <button role="tab" id="tab-btn-osint" aria-controls="tab-osint" aria-selected="false" data-tab="osint">osint</button>
+      </nav>
       <div class="stats"><span id="stat-count">0</span> fichiers · <span id="stat-size">0 o</span></div>
       <div class="session">session <b id="session-left">--:--</b> <button id="logout" class="link">déconnexion</button></div>
     </header>
 
-    <label id="drop" class="drop" tabindex="0">
-      <input id="file-input" type="file" multiple hidden>
-      <span class="drop-big">déposer des fichiers</span>
-      <span class="drop-small">ou cliquer · max 2 Go par fichier · stockage permanent</span>
-    </label>
-
-    <section id="queue" class="queue" aria-live="polite"></section>
-
-    <section class="files">
-      <div class="files-head">
-        <h2>&gt; ls ./vault</h2>
-        <input id="search" type="search" placeholder="grep…" aria-label="Rechercher un fichier">
+    <!-- FICHIERS -->
+    <main id="tab-files" role="tabpanel" aria-labelledby="tab-btn-files">
+      <label id="drop" class="drop" tabindex="0">
+        <input id="file-input" type="file" multiple hidden>
+        <span class="drop-big">déposer des fichiers</span>
+        <span class="drop-small">ou cliquer · max 2 Go par fichier · stockage permanent</span>
+      </label>
+      <div class="upload-tags">
+        <label for="upload-tags">tags des prochains envois</label>
+        <input id="upload-tags" placeholder="ex : perso, 2026" spellcheck="false">
       </div>
-      <div id="list" class="list"></div>
-    </section>
-  </main>
+
+      <section id="queue" class="queue" aria-live="polite"></section>
+
+      <section class="files">
+        <div class="toolbar">
+          <div class="searchbox">
+            <span aria-hidden="true">&gt;</span>
+            <input id="search" type="search" placeholder="rechercher…  ex : rapport type:doc size:>10mo after:30d" aria-label="Recherche avancée" spellcheck="false">
+            <button id="help-btn" class="link" aria-expanded="false" aria-controls="help">syntaxe</button>
+          </div>
+          <select id="sort" aria-label="Tri"></select>
+        </div>
+        <div id="help" class="help" hidden></div>
+        <div id="chips" class="chips" role="group" aria-label="Filtrer par type"></div>
+        <p id="info" class="info" role="status"></p>
+
+        <div class="thead" role="row">
+          <button data-col="name">nom</button>
+          <span>tags</span>
+          <button data-col="size" class="r">taille</button>
+          <button data-col="date" class="r">date</button>
+          <span></span>
+        </div>
+        <div id="list" class="list"></div>
+      </section>
+    </main>
+
+    <!-- OSINT -->
+    <main id="tab-osint" role="tabpanel" aria-labelledby="tab-btn-osint" hidden>
+      <p class="osint-note">// sources publiques uniquement. Respecte la vie privée des gens et le RGPD : pas de harcèlement, pas de doxxing.</p>
+      <h2 class="sec">&gt; outils intégrés</h2>
+      <div id="tools" class="tools"></div>
+      <div class="dir-head">
+        <h2 class="sec">&gt; annuaire <span id="dir-count"></span></h2>
+        <input id="dir-search" type="search" placeholder="filtrer… (ex : satellite, email, entreprise)" aria-label="Filtrer l'annuaire">
+      </div>
+      <div id="directory" class="directory"></div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
 
   <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
